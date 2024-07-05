@@ -1,35 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, Button, FlatList, TouchableOpacity } from 'react-native';
+import { database } from './firebase';
+import { ref, push, onValue, remove, update } from 'firebase/database';
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [inputTitle, setInputTitle] = useState('');
 
+  useEffect(() => {
+    const tasksRef = ref(database, 'tasks');
+    onValue(tasksRef, (snapshot) => {
+      const data = snapshot.val();
+      const tasksList = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+      setTasks(tasksList);
+    });
+  }, []);
+
   const addTask = () => {
-    if (inputTitle.trim()) { // Ensure the title is not just empty spaces
+    if (inputTitle.trim()) {
       const newTask = {
-        id: Date.now(),
         title: inputTitle,
-        status: 'due/false'  // Default status
+        status: 'due/false'
       };
-      setTasks([...tasks, newTask]);
-      setInputTitle('');  // Clear input field after adding
+      const tasksRef = ref(database, 'tasks');
+      push(tasksRef, newTask);
+      setInputTitle('');
     }
   };
 
-  const deleteTask = id => {
-    setTasks(tasks.filter(task => task.id !== id));
+  const deleteTask = (id) => {
+    const taskRef = ref(database, `tasks/${id}`);
+    remove(taskRef);
   };
 
-  const toggleStatus = id => {
-    setTasks(tasks.map(task => 
-      task.id === id ? { ...task, status: task.status === 'due/false' ? 'done/true' : 'due/false' } : task
-    ));
+  const toggleStatus = (id, currentStatus) => {
+    const taskRef = ref(database, `tasks/${id}`);
+    update(taskRef, {
+      status: currentStatus === 'due/false' ? 'done/true' : 'due/false'
+    });
   };
 
   return (
     <View style={styles.container}>
-     
       <TextInput
         style={styles.input}
         placeholder="Enter Task Title"
@@ -39,15 +51,15 @@ export default function App() {
       <Button
         title="Add Task"
         onPress={addTask}
-        disabled={!inputTitle.trim()}  // Disable the button if input is empty or spaces
+        disabled={!inputTitle.trim()}
       />
       <FlatList
         data={tasks}
-        keyExtractor={item => item.id.toString()}
+        keyExtractor={item => item.id}
         renderItem={({ item }) => (
           <View style={styles.taskItem}>
             <Text style={styles.taskText}>{item.title} - Status: {item.status === 'due/false' ? 'Due' : 'Done'}</Text>
-            <TouchableOpacity onPress={() => toggleStatus(item.id)} style={[styles.toggleButton, { backgroundColor: item.status === 'due/false' ? '#add8e6' : '#0074D9'}]}>
+            <TouchableOpacity onPress={() => toggleStatus(item.id, item.status)} style={[styles.toggleButton, { backgroundColor: item.status === 'due/false' ? '#add8e6' : '#0074D9' }]}>
               <Text style={styles.toggleButtonText}>Toggle Status</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => deleteTask(item.id)} style={styles.deleteButton}>
@@ -66,11 +78,6 @@ const styles = StyleSheet.create({
     marginTop: 40,
     padding: 20,
   },
-  instructions: {
-    fontSize: 14,
-    marginBottom: 10,
-    color: 'grey'
-  },
   input: {
     height: 40,
     borderColor: 'gray',
@@ -86,8 +93,6 @@ const styles = StyleSheet.create({
     borderColor: 'gray',
     borderWidth: 1,
     marginBottom: 10,
-    marginTop: 10,
-
   },
   taskText: {
     flex: 1,
